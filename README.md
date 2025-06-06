@@ -51,29 +51,24 @@ OpenAPI documentation is available at `/v3/api-docs` and Swagger UI at `/swagger
 ### Get Questions
 
 ```http
-GET /api/v1/quiz/questions
-Headers:
-  X-Session-Id: {sessionId}
-Query Parameters:
-  amount=10  (default, number of questions to fetch)
-
-Returns a list of questions without correct answers.
+### List questions - Returns a list of questions without correct answers.
+GET /api/v1/quiz/questions?amount=10
+X-Session-Id: {sessionId}
 ```
 
 ### Submit Answers
 
 ```http
+### Submit answers - Returns a result indicating which answers were correct.
 POST /api/v1/quiz/answers
 Content-Type: application/json
 
 {
   "answers": [
     { "questionId": "uuid", "answerId": "uuid" },
-    ...
+    { "questionId": "uuid", "answerId": "uuid" },
   ]
 }
-
-Returns a result indicating which answers were correct.
 ```
 
 **Implementation Details**
