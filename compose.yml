@@ -1,0 +1,13 @@
+services:
+  trivijava:
+    container_name: trivijava
+    image: ghcr.io/gwku/trivijava:latest
+    networks:
+      - proxy
+    environment:
+      SPRING_PROFILES_ACTIVE: "prod"
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true
