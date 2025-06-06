@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TriviJava</title>
+    <style>
+        :root {
+            --primary: #176a3a;
+            --primary-dark: #104d29;
+            --primary-light: #e6f4ec;
+            --correct: #388e3c;
+            --incorrect: #d32f2f;
+            --background: #fafbfa;
+            --container-bg: #f5f5f5;
+            --container-shadow: 0 2px 8px rgba(23,106,58,0.06);
+            --results-bg: #fff;
+            --results-shadow: 0 4px 24px rgba(23,106,58,0.10);
+            --border: #ddd;
+            --border-light: #f0f0f0;
+            --option-hover: #e6f4ec;
+            --button-disabled: #ccc;
+            --text: #222;
+            --text-light: #666;
+            --card-bg: #fff;
+            --card-shadow: 0 2px 12px rgba(23,106,58,0.07);
+            --card-radius: 18px;
+            --option-correct-bg: #e6fbe9;
+            --option-incorrect-bg: #fdeaea;
+            --option-neutral-bg: #f8f8f8;
+            --option-border: #e0e0e0;
+            --icon-correct: #388e3c;
+            --icon-incorrect: #d32f2f;
+            --card-min-height: 210px;
+        }
+        
+        * { box-sizing: border-box; }
+        
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            background: var(--background);
+        }
+        
+        h1 { text-align: center; }
+        
+        .quiz-container {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: var(--container-shadow);
+        }
+        
+        .question {
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .question.active { display: block; }
+        
+        .options {
+            display: grid;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .option {
+            padding: 10px;
+            background: var(--results-bg);
+            border: 1.5px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .option:hover {
+            background: var(--option-hover);
+            border-color: var(--primary);
+        }
+        
+        .option.selected {
+            background: var(--primary-light);
+            border-color: var(--primary);
+        }
+        
+        .button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            transition: background 0.2s;
+        }
+        
+        .button:hover:not(:disabled) {
+            background: var(--primary-dark);
+        }
+        
+        .button:disabled {
+            background: var(--button-disabled);
+            cursor: not-allowed;
+        }
+        
+        .results {
+            display: none;
+            max-width: 600px;
+            width: 100%;
+            margin: 40px auto 0;
+            background: var(--background);
+            border-radius: 20px;
+            box-shadow: var(--results-shadow);
+            padding: 32px 24px 24px;
+            position: relative;
+        }
+        
+        .results.show { display: block; }
+        
+        .results-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .results-title {
+            font-size: 2em;
+            font-weight: 700;
+            color: #5a5a5a;
+            margin-bottom: 8px;
+        }
+        
+        .score-summary {
+            font-size: 1.2em;
+            margin-bottom: 0;
+            font-weight: 500;
+        }
+        
+        .question-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 100%;
+        }
+        
+        .question-card {
+            background: var(--card-bg);
+            border-radius: var(--card-radius);
+            box-shadow: var(--card-shadow);
+            padding: 24px 20px 18px 20px;
+            width: 100%;
+            min-height: var(--card-min-height);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+        
+        .question-card .question-text {
+            font-size: 1.08em;
+            font-weight: 600;
+            margin-bottom: 18px;
+            color: var(--text);
+        }
+        
+        .answers-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1 1 auto;
+            justify-content: flex-start;
+        }
+        .answer-option {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            border-radius: 8px;
+            background: var(--option-neutral-bg);
+            border: 1.5px solid var(--option-border);
+            font-size: 1em;
+            color: var(--text);
+            position: relative;
+        }
+        
+        .answer-option.selected.correct {
+            background: var(--option-correct-bg);
+            border-color: var(--correct);
+            color: var(--correct);
+            font-weight: 600;
+        }
+        
+        .answer-option.selected.incorrect {
+            background: var(--option-incorrect-bg);
+            border-color: var(--incorrect);
+            color: var(--incorrect);
+            font-weight: 600;
+        }
+        
+        .answer-option.correct:not(.selected) {
+            background: var(--option-correct-bg);
+            border-color: var(--correct);
+            color: var(--correct);
+        }
+        
+        .answer-option .icon {
+            margin-left: auto;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+        }
+        
+        .answer-option .icon.correct {
+            color: var(--icon-correct);
+        }
+        
+        .answer-option .icon.incorrect {
+            color: var(--icon-incorrect);
+        }
+        
+        .progress {
+            margin-bottom: 20px;
+            color: var(--text-light);
+        }
+        
+        .loading-spinner {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            height: 180px;
+        }
+        
+        .spinner {
+            border: 6px solid var(--option-hover);
+            border-top: 6px solid var(--primary);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 700px) {
+            .results {
+                padding: 10px;
+                max-width: 100vw;
+            }
+            .question-card {
+                padding: 14px 6px 10px 6px;
+                min-height: 160px;
+            }
+        }
+        
+        .results-footer {
+            display: flex;
+            justify-content: center;
+            margin-top: 36px;
+        }
+        .button.start-over {
+            min-width: 180px;
+            font-size: 1.15em;
+            padding: 14px 32px;
+            margin: 0 auto;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>TriviJava Quiz</h1>
+    
+    <div id="loading" class="loading-spinner">
+        <div class="spinner"></div>
+    </div>
+    
+    <div id="quiz" class="quiz-container" style="display:none">
+        <div id="questions"></div>
+        <div class="progress">
+            Question <span id="currentQuestion">1</span> of <span id="totalQuestions">10</span>
+        </div>
+        <button id="prevButton" class="button" style="display:none">Previous Question</button>
+        <button id="nextButton" class="button" disabled>Next Question</button>
+    </div>
+
+    <div id="results" class="results">
+        <div id="score"></div>
+        <button id="restartButton" class="button">Start New Quiz</button>
+    </div>
+
+    <script>
+        class Quiz {
+            constructor() {
+                this.elements = {
+                    loading: document.getElementById('loading'),
+                    quiz: document.getElementById('quiz'),
+                    questions: document.getElementById('questions'),
+                    currentQuestion: document.getElementById('currentQuestion'),
+                    totalQuestions: document.getElementById('totalQuestions'),
+                    prevButton: document.getElementById('prevButton'),
+                    nextButton: document.getElementById('nextButton'),
+                    results: document.getElementById('results'),
+                    score: document.getElementById('score'),
+                    restartButton: document.getElementById('restartButton')
+                };
+                
+                this.state = {
+                    questions: [],
+                    currentQuestionIndex: 0,
+                    answers: new Map()
+                };
+                
+                this.sessionId = this.getOrCreateSessionId();
+                this.init();
+            }
+
+            getOrCreateSessionId() {
+                const storageKey = 'trivijava_session_id';
+                let sessionId = localStorage.getItem(storageKey);
+                if (!sessionId) {
+                    sessionId = crypto.randomUUID();
+                    localStorage.setItem(storageKey, sessionId);
+                }
+                return sessionId;
+            }
+
+            async init() {
+                this.showLoading(true);
+                await this.fetchQuestions();
+                this.showLoading(false);
+                this.renderQuestions();
+                this.setupEventListeners();
+            }
+
+            async fetchQuestions() {
+                try {
+                    const response = await fetch('/api/v1/quiz/questions?amount=5', {
+                        headers: { 'X-Session-Id': this.sessionId }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    this.state.questions = data.questions;
+                    this.elements.totalQuestions.textContent = this.state.questions.length;
+                } catch (error) {
+                    console.error('Error fetching questions:', error);
+                    this.showError('Failed to load questions. Please try again.');
+                }
+            }
+
+            renderQuestions() {
+                const fragment = document.createDocumentFragment();
+                
+                this.state.questions.forEach((question, index) => {
+                    const questionElement = this.createQuestionElement(question, index);
+                    fragment.appendChild(questionElement);
+                });
+                
+                this.elements.questions.appendChild(fragment);
+            }
+
+            createQuestionElement(question, index) {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = `question ${index === 0 ? 'active' : ''}`;
+                
+                const optionsHTML = question.answers
+                    .map(answer => `
+                        <div class="option" data-question-id="${question.id}" data-option-id="${answer.answerId}">
+                            ${this.decodeHtml(answer.answer)}
+                        </div>
+                    `).join('');
+                
+                questionDiv.innerHTML = `
+                    <h3>${this.decodeHtml(question.question)}</h3>
+                    <div class="options">${optionsHTML}</div>
+                `;
+                
+                return questionDiv;
+            }
+
+            setupEventListeners() {
+                this.elements.questions.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('option')) {
+                        this.handleOptionClick(e.target);
+                    }
+                });
+
+                this.elements.nextButton.addEventListener('click', () => this.handleNext());
+                this.elements.prevButton.addEventListener('click', () => this.handlePrev());
+                this.elements.restartButton.addEventListener('click', () => this.restart());
+            }
+
+            handleNext() {
+                const { currentQuestionIndex, questions } = this.state;
+                
+                if (currentQuestionIndex < questions.length - 1) {
+                    this.navigateToQuestion(currentQuestionIndex + 1);
+                } else {
+                    this.submitAnswers();
+                }
+            }
+
+            handlePrev() {
+                if (this.state.currentQuestionIndex > 0) {
+                    this.navigateToQuestion(this.state.currentQuestionIndex - 1);
+                }
+            }
+
+            navigateToQuestion(newIndex) {
+                const questions = document.querySelectorAll('.question');
+                
+                questions[this.state.currentQuestionIndex]?.classList.remove('active');
+                
+                this.state.currentQuestionIndex = newIndex;
+                questions[newIndex]?.classList.add('active');
+                
+                this.updateNavigationUI();
+            }
+
+            updateNavigationUI() {
+                const { currentQuestionIndex, questions } = this.state;
+                const isLastQuestion = currentQuestionIndex === questions.length - 1;
+                
+                this.elements.currentQuestion.textContent = currentQuestionIndex + 1;
+                this.elements.nextButton.disabled = !this.isCurrentQuestionAnswered();
+                this.elements.prevButton.style.display = currentQuestionIndex > 0 ? '' : 'none';
+                this.elements.nextButton.textContent = isLastQuestion ? 'Submit Quiz' : 'Next Question';
+            }
+
+            isCurrentQuestionAnswered() {
+                const currentQuestion = this.state.questions[this.state.currentQuestionIndex];
+                return this.state.answers.has(currentQuestion?.id);
+            }
+
+            handleOptionClick(option) {
+                const questionId = option.dataset.questionId;
+                const optionId = option.dataset.optionId;
+                
+                this.clearQuestionSelection(questionId);
+                
+                option.classList.add('selected');
+                this.state.answers.set(questionId, optionId);
+                
+                this.elements.nextButton.disabled = false;
+            }
+
+            clearQuestionSelection(questionId) {
+                const questionOptions = document.querySelectorAll(`[data-question-id="${questionId}"]`);
+                questionOptions.forEach(opt => opt.classList.remove('selected'));
+            }
+
+            async submitAnswers() {
+                try {
+                    const payload = {
+                        sessionId: this.sessionId,
+                        answers: Array.from(this.state.answers.entries()).map(([questionId, answerId]) => ({
+                            questionId,
+                            answerId
+                        }))
+                    };
+
+                    const response = await fetch('/api/v1/quiz/answers', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const results = await response.json();
+                    this.showResults(results);
+                } catch (error) {
+                    console.error('Error submitting answers:', error);
+                    this.showError('Failed to submit answers. Please try again.');
+                }
+            }
+
+            showResults(results) {
+                this.elements.quiz.style.display = 'none';
+                this.elements.results.classList.add('show');
+
+                const questionMap = this.createQuestionMap();
+                const correctCount = results.results.filter(r => r.isCorrect).length;
+                const score = Math.round((correctCount / this.state.questions.length) * 100);
+
+                this.elements.score.innerHTML = this.createResultsHTML(results, questionMap, score, correctCount);
+                
+                const resultsFooter = document.createElement('div');
+                resultsFooter.className = 'results-footer';
+                this.elements.restartButton.classList.add('start-over');
+                resultsFooter.appendChild(this.elements.restartButton);
+                this.elements.score.parentNode.appendChild(resultsFooter);
+            }
+
+            createQuestionMap() {
+                return this.state.questions.reduce((map, question) => {
+                    map[question.id] = question;
+                    return map;
+                }, {});
+            }
+
+            createResultsHTML(results, questionMap, score, correctCount) {
+                const summaryHTML = `
+                    <div class="results-header">
+                        <div class="results-title">Quiz Result</div>
+                        <div class="score-summary">
+                            You scored <span style="color: var(--primary)">${score}%</span> 
+                            (${correctCount} out of ${this.state.questions.length} correct)
+                        </div>
+                    </div>
+                `;
+
+                const cardsHTML = `
+                    <div class="question-cards">
+                        ${results.results.map((result, idx) => {
+                            const question = questionMap[result.questionId];
+                            return this.createQuestionCardHTML(question, result, idx + 1);
+                        }).join('')}
+                    </div>
+                `;
+
+                return summaryHTML + cardsHTML;
+            }
+
+            createQuestionCardHTML(question, result, questionNumber) {
+                const userAnswerId = result.givenAnswerId;
+                const correctAnswerId = result.correctAnswerId;
+                const isCorrect = result.isCorrect;
+                const answers = question.answers;
+                const questionText = `${questionNumber}. ${this.decodeHtml(question.question)}`;
+
+                const answersHTML = answers.map(answer => {
+                    let classes = 'answer-option';
+                    let icon = '';
+                    if (answer.answerId === userAnswerId) {
+                        classes += ' selected';
+                        if (isCorrect && userAnswerId === correctAnswerId) {
+                            classes += ' correct';
+                            icon = '<span class="icon correct">✔️</span>';
+                        } else if (!isCorrect && userAnswerId !== correctAnswerId) {
+                            classes += ' incorrect';
+                            icon = '<span class="icon incorrect">❌</span>';
+                        }
+                    } else if (answer.answerId === correctAnswerId) {
+                        classes += ' correct';
+                        icon = '<span class="icon correct">✔️</span>';
+                    }
+                    return `<div class="${classes}">${this.decodeHtml(answer.answer)}${icon}</div>`;
+                }).join('');
+
+                return `
+                    <div class="question-card">
+                        <div class="question-text">${questionText}</div>
+                        <div class="answers-list">${answersHTML}</div>
+                    </div>
+                `;
+            }
+
+            showError(message) {
+                alert(message);
+            }
+
+            restart() {
+                location.reload();
+            }
+
+            showLoading(isLoading) {
+                this.elements.loading.style.display = isLoading ? 'flex' : 'none';
+                this.elements.quiz.style.display = isLoading ? 'none' : '';
+            }
+
+            decodeHtml(text) {
+                const txt = document.createElement('textarea');
+                txt.innerHTML = text;
+                return txt.value;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new Quiz();
+        });
+    </script>
+</body>
+</html>
