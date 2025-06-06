@@ -2,7 +2,7 @@
 
 A simple quiz web application backend built with Java 21 and Spring Boot, which fetches trivia questions from the Open Trivia Database API and allows users to answer them without exposing the correct answers on the client side.
 
-You can find a hosted version here: [Trivijava](https://trivijava.gkloudl.nl).
+You can find a hosted version here: [Trivijava](https://trivijava.gkloud.nl).
 
 To read about the building process, you can read my [blog post](https://gerwinkuijntjes.nl/en/projects/building-a-quiz-app-with-java).
 
