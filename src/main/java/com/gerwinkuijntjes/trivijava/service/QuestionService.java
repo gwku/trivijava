@@ -33,7 +33,7 @@ public class QuestionService {
     public List<Question> getQuestions(String sessionId, int amount) {
         var token = tokenRepository.findToken(sessionId)
                 .orElseGet(() -> {
-                    var newToken = triviaClient.requestNewToken();
+                    var newToken = triviaClient.requestNewTokenAsync().join();
                     tokenRepository.saveToken(sessionId, newToken);
                     return newToken;
                 });
@@ -42,18 +42,18 @@ public class QuestionService {
             return getQuestionsAndSaveCorrectAnswer(token, amount);
         } catch (TokenNotFoundTriviaApiException ex) {
             logger.warn("Token not found. Requesting new token...");
-            var newToken = triviaClient.requestNewToken();
+            var newToken = triviaClient.requestNewTokenAsync().join();
             tokenRepository.saveToken(sessionId, newToken);
             return getQuestionsAndSaveCorrectAnswer(newToken, amount);
         } catch (TokenExhaustedTriviaApiException ex) {
             logger.info("Token exhausted. Resetting token...");
-            var resetToken = triviaClient.resetToken(token);
+            var resetToken = triviaClient.resetTokenAsync(token).join();
             return getQuestionsAndSaveCorrectAnswer(resetToken, amount);
         }
     }
 
     public List<Question> getQuestionsAndSaveCorrectAnswer(String token, int amount) {
-        var questions = triviaClient.fetchQuestions(token, amount);
+        var questions = triviaClient.fetchQuestionsAsync(token, amount).join();
         questions.forEach(question -> questionRepository.storeCorrectAnswer(question.id(), question.correctAnswer().id()));
         return questions;
     }

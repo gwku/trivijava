@@ -3,6 +3,7 @@ package com.gerwinkuijntjes.trivijava.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,8 +82,8 @@ class QuestionServiceTest {
         );
         
         when(tokenRepository.findToken(sessionId)).thenReturn(Optional.of(token));
-        when(triviaClient.fetchQuestions(token, amount)).thenReturn(expectedQuestions);
-        
+        when(triviaClient.fetchQuestionsAsync(token, amount)).thenReturn(CompletableFuture.completedFuture(expectedQuestions));
+
         // Act
         List<Question> result = questionService.getQuestions(sessionId, amount);
         
@@ -115,8 +116,8 @@ class QuestionServiceTest {
         );
         
         when(tokenRepository.findToken(sessionId)).thenReturn(Optional.empty());
-        when(triviaClient.requestNewToken()).thenReturn(newToken);
-        when(triviaClient.fetchQuestions(newToken, amount)).thenReturn(expectedQuestions);
+        when(triviaClient.requestNewTokenAsync()).thenReturn(CompletableFuture.completedFuture(newToken));
+        when(triviaClient.fetchQuestionsAsync(newToken, amount)).thenReturn(CompletableFuture.completedFuture(expectedQuestions));
         
         // Act
         List<Question> result = questionService.getQuestions(sessionId, amount);
@@ -152,9 +153,9 @@ class QuestionServiceTest {
         );
         
         when(tokenRepository.findToken(sessionId)).thenReturn(Optional.of(oldToken));
-        when(triviaClient.fetchQuestions(oldToken, amount)).thenThrow(new TokenNotFoundTriviaApiException("Token not found"));
-        when(triviaClient.requestNewToken()).thenReturn(newToken);
-        when(triviaClient.fetchQuestions(newToken, amount)).thenReturn(expectedQuestions);
+        when(triviaClient.fetchQuestionsAsync(oldToken, amount)).thenThrow(new TokenNotFoundTriviaApiException("Token not found"));
+        when(triviaClient.requestNewTokenAsync()).thenReturn(CompletableFuture.completedFuture(newToken));
+        when(triviaClient.fetchQuestionsAsync(newToken, amount)).thenReturn(CompletableFuture.completedFuture(expectedQuestions));
         
         // Act
         List<Question> result = questionService.getQuestions(sessionId, amount);
@@ -163,7 +164,7 @@ class QuestionServiceTest {
         assertThat(result).isEqualTo(expectedQuestions);
         verify(tokenRepository).saveToken(sessionId, newToken);
         verify(questionRepository).storeCorrectAnswer(any(), any());
-        verify(triviaClient).fetchQuestions(newToken, amount);
+        verify(triviaClient).fetchQuestionsAsync(newToken, amount);
     }
     
     @Test
@@ -191,9 +192,9 @@ class QuestionServiceTest {
         );
         
         when(tokenRepository.findToken(sessionId)).thenReturn(Optional.of(oldToken));
-        when(triviaClient.fetchQuestions(oldToken, amount)).thenThrow(new TokenExhaustedTriviaApiException("Token exhausted"));
-        when(triviaClient.resetToken(oldToken)).thenReturn(resetToken);
-        when(triviaClient.fetchQuestions(resetToken, amount)).thenReturn(expectedQuestions);
+        when(triviaClient.fetchQuestionsAsync(oldToken, amount)).thenThrow(new TokenExhaustedTriviaApiException("Token exhausted"));
+        when(triviaClient.resetTokenAsync(oldToken)).thenReturn(CompletableFuture.completedFuture(resetToken));
+        when(triviaClient.fetchQuestionsAsync(resetToken, amount)).thenReturn(CompletableFuture.completedFuture(expectedQuestions));
         
         // Act
         List<Question> result = questionService.getQuestions(sessionId, amount);

@@ -2,147 +2,133 @@ package com.gerwinkuijntjes.trivijava.client;
 
 import com.gerwinkuijntjes.trivijava.client.dto.response.TriviaApiResponse;
 import com.gerwinkuijntjes.trivijava.config.TriviaApiConfig;
-import com.gerwinkuijntjes.trivijava.exception.TokenExhaustedTriviaApiException;
-import com.gerwinkuijntjes.trivijava.exception.TokenNotFoundTriviaApiException;
+import com.gerwinkuijntjes.trivijava.exception.*;
 import com.gerwinkuijntjes.trivijava.model.Question;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class TriviaApiClient {
     private static final Logger logger = LoggerFactory.getLogger(TriviaApiClient.class);
-    private final RestTemplate restTemplate;
-    private final TriviaApiConfig properties;
+    private final WebClient webClient;
+    private final TriviaApiConfig config;
 
-    private Instant lastRequestTime = Instant.EPOCH;
-
-    public TriviaApiClient(RestTemplate restTemplate, TriviaApiConfig properties) {
-        this.restTemplate = restTemplate;
-        this.properties = properties;
+    public TriviaApiClient(WebClient webClient, TriviaApiConfig config) {
+        this.webClient = webClient;
+        this.config = config;
     }
 
-    public synchronized List<Question> fetchQuestions(String sessionId, int amount) {
-        int attempt = 0;
+    public CompletableFuture<List<Question>> fetchQuestionsAsync(String sessionId, int amount) {
+        return webClient.get()
+                .uri(uri -> uri.path("/api.php")
+                        .queryParam("amount", amount)
+                        .queryParam("token", sessionId)
+                        .build())
+                .retrieve()
+                .bodyToMono(TriviaApiResponse.class)
+                .doOnError(ex -> logger.error("Error during API request", ex))
+                .flatMap(this::handleResponse)
+                .retryWhen(retrySpec())
+                .onErrorResume(this::handleError)
+                .toFuture();
+    }
 
-        while (attempt < properties.getMaxRetries()) {
-            if (attempt > 0) {
-                enforceRateLimit();  // Wait only after first attempt
-            }
-
-            var uri = UriComponentsBuilder.fromUriString("https://opentdb.com/api.php")
-                    .queryParam("amount", amount)
-                    .queryParam("token", sessionId)
-                    .build()
-                    .toUri();
-
-            try {
-                TriviaApiResponse response = restTemplate.getForObject(uri, TriviaApiResponse.class);
-                lastRequestTime = Instant.now();
-
-                if (response == null) {
-                    logger.warn("Received null response from Trivia API");
-                    return Collections.emptyList();
-                }
-
-                switch (response.responseCode()) {
-                    case 0:
-                        return response.toDomainQuestions();
-                    case 1:
-                        logger.info("Trivia API: No results for this query.");
-                        return Collections.emptyList();
-                    case 2:
-                        logger.warn("Trivia API: Invalid parameters");
-                        return Collections.emptyList();
-                    case 3:
-                        throw new TokenNotFoundTriviaApiException("Trivia API: Token not found");
-                    case 4:
-                        throw new TokenExhaustedTriviaApiException("Trivia API: Token exhausted, reset needed");
-                    case 5:
-                        attempt++;
-                        if (attempt >= properties.getMaxRetries()) {
-                            throw new IllegalStateException("Trivia API: Rate limit exceeded after retries");
-                        }
-                        logger.warn("Trivia API: Rate limit exceeded (code 5), retrying (attempt {}/{})", attempt, properties.getMaxRetries());
-                        break;
-                    default:
-                        logger.warn("Trivia API: Unknown response code {}", response.responseCode());
-                        return Collections.emptyList();
-                }
-
-            } catch (HttpClientErrorException.TooManyRequests ex) {
-                attempt++;
-                if (attempt >= properties.getMaxRetries()) {
-                    logger.error("HTTP 429 Too Many Requests after retries", ex);
-                    return Collections.emptyList();
-                }
-                logger.warn("HTTP 429 Too Many Requests, retrying (attempt {}/{})", attempt, properties.getMaxRetries());
-            } catch (HttpClientErrorException | HttpServerErrorException ex) {
-                logger.error("HTTP error from Trivia API: {}", ex.getStatusCode(), ex);
-                return Collections.emptyList();
-            }
+    private Mono<List<Question>> handleResponse(TriviaApiResponse response) {
+        if (response == null) {
+            logger.warn("Received null response from Trivia API");
+            return Mono.just(Collections.emptyList());
         }
 
-        return Collections.emptyList();
+        return switch (response.responseCode()) {
+            case 0 -> Mono.just(response.toDomainQuestions());
+            case 1 -> {
+                logger.info("Trivia API: No results (code {}).", response.responseCode());
+                yield Mono.just(Collections.emptyList());
+            }
+            case 2 -> {
+                logger.info("Trivia API: Invalid parameters (code {}).", response.responseCode());
+                yield Mono.just(Collections.emptyList());
+            }
+            case 3 -> Mono.error(new TokenNotFoundTriviaApiException("Token not found"));
+            case 4 -> Mono.error(new TokenExhaustedTriviaApiException("Token exhausted"));
+            case 5 -> {
+                logger.warn("Rate limit exceeded");
+                yield Mono.error(new RateLimitExceededTriviaApiException("Rate limit exceeded"));
+            }
+            default -> {
+                logger.warn("Unknown response code: {}", response.responseCode());
+                yield Mono.just(Collections.emptyList());
+            }
+        };
+    }
+
+    private Retry retrySpec() {
+        return Retry.fixedDelay(config.getMaxRetries(), Duration.ofSeconds(config.getRateLimitSeconds()))
+                .filter(this::shouldRetry)
+                .doBeforeRetry(retry -> logger.warn("Retrying ({}/{}): {}",
+                        retry.totalRetries() + 1, config.getMaxRetries(), retry.failure().getMessage()))
+                .onRetryExhaustedThrow((spec, signal) -> {
+                    logger.error("All retries exhausted");
+                    return new IllegalStateException("Rate limit exceeded after retries");
+                });
+    }
+
+    private boolean shouldRetry(Throwable ex) {
+        return ex instanceof RateLimitExceededTriviaApiException ||
+                (ex instanceof WebClientResponseException webEx && webEx.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    private Mono<List<Question>> handleError(Throwable ex) {
+        if (ex instanceof TokenNotFoundTriviaApiException || ex instanceof TokenExhaustedTriviaApiException)
+            return Mono.error(ex);
+
+        logger.error("Trivia API error", ex);
+        return Mono.just(Collections.emptyList());
+    }
+
+    public CompletableFuture<String> requestNewTokenAsync() {
+        return fetchToken("request", Optional.empty());
+    }
+
+    public CompletableFuture<String> resetTokenAsync(String token) {
+        return fetchToken("reset", Optional.of(token));
+    }
+
+    private CompletableFuture<String> fetchToken(String command, Optional<String> token) {
+        return webClient.get()
+                .uri(uri -> uri.path("/api_token.php")
+                        .queryParam("command", command)
+                        .queryParamIfPresent("token", token)
+                        .build())
+                .retrieve()
+                .bodyToMono(TokenResponse.class)
+                .<String>handle((res, sink) -> {
+                    if (res == null || res.responseCode != 0) {
+                        logger.error("Token command '{}' failed: {}", command, res != null ? res.responseMessage : "null response");
+                        sink.error(new IllegalStateException("Failed token operation"));
+                    } else {
+                        sink.next(res.token);
+                    }
+                })
+                .onErrorMap(ex -> {
+                    logger.error("Error during '{}' token command", command, ex);
+                    return new IllegalStateException("Token operation failed", ex);
+                })
+                .toFuture();
     }
 
     private record TokenResponse(int responseCode, String responseMessage, String token) {
     }
-
-    public String requestNewToken() {
-        var uri = "https://opentdb.com/api_token.php?command=request";
-        try {
-            var response = restTemplate.getForObject(uri, TokenResponse.class);
-            if (response == null || response.responseCode() != 0) {
-                logger.error("Failed to obtain new token from Trivia API: response invalid or null");
-                throw new IllegalStateException("Failed to obtain new token from Trivia API");
-            }
-            return response.token();
-        } catch (Exception ex) {
-            logger.error("Exception while requesting new token from Trivia API", ex);
-            throw new IllegalStateException("Exception during token request", ex);
-        }
-    }
-
-    public String resetToken(String token) {
-        var uri = "https://opentdb.com/api_token.php?command=reset&token=" + token;
-        try {
-            var response = restTemplate.getForObject(uri, TokenResponse.class);
-            if (response == null || response.responseCode() != 0) {
-                logger.error("Failed to reset token: invalid response or null");
-                throw new IllegalStateException("Failed to reset token");
-            }
-
-            return response.token();
-        } catch (Exception ex) {
-            logger.error("Exception while resetting token", ex);
-            throw new IllegalStateException("Exception during token reset", ex);
-        }
-    }
-
-    private void enforceRateLimit() {
-        long secondsSinceLast = Instant.now().getEpochSecond() - lastRequestTime.getEpochSecond();
-        int requiredWait = properties.getRateLimitSeconds();
-
-        if (secondsSinceLast >= requiredWait)
-            return;
-
-        long sleepMillis = (requiredWait - secondsSinceLast) * 1000L;
-        logger.info("Rate limit: Sleeping {} ms to respect rate limit", sleepMillis);
-        try {
-            Thread.sleep(sleepMillis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.warn("Rate-limit sleep interrupted");
-        }
-    }
 }
-
